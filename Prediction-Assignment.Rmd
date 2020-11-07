@@ -1,0 +1,79 @@
+---
+title: "Prediction Assignment Writeup"
+author: "William Huynh"
+date: "03/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### The Goal
+
+The goal of this project is to predict the manner in which participants exercised using data from a study of 6 participants wearing Fitbit or similar devices. The goal was to use data from accelerometers on the belt, forearm, arm, and dumbbell of the 6 participants.
+
+### Modelling and Cross-Validation
+
+The prediction model chosen for this project is the Random Forest model, because it is one of the most widely used and accurate models available. 
+
+```{r warning=FALSE, message=FALSE}
+library(mlbench)
+library(caret)
+set.seed(95014)
+training<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+testing<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+```
+
+The original training dataset is split into a training set and a test set.
+
+```{r warning=FALSE, message=FALSE}
+inTrain <- createDataPartition(y=training$classe,p=0.60, list=FALSE)
+subtrain<-training[inTrain,]
+subtest<-training[-inTrain,]
+```
+
+Due to the complexity of the algorithm and the large the number of trees it needs to process, clusters were used to dramatically speed up the processing time. Credit is given to Len Greski for his contribution to assist students in this project:
+
+https://github.com/lgreski/datasciencectacontent/blob/master/markdown/pml-randomForestPerformance.md
+
+```{r warning=FALSE, message=FALSE}
+library(parallel)
+library(doParallel)
+cluster <- makeCluster(detectCores() - 1)
+registerDoParallel(cluster)
+```
+
+For this model, 5-fold cross validation was used to give more variation and less bias and to get the best result on the cross-validated test sets.
+
+```{r warning=FALSE, message=FALSE}
+fitControl <- trainControl(method = "cv", number = 5, allowParallel = TRUE)
+```
+
+For the purpose of this project, Len Greski recommended that the model should have an accuracy of at least 99%, based on his analysis below:
+
+https://github.com/lgreski/datasciencectacontent/blob/master/markdown/pml-requiredModelAccuracy.md
+
+In order to achieve this level of accuracy for the model, all variables relating to the belt, forearm, arm, and dumbbell (13 variables for each of the 4 types) were used to predict the outcome.
+
+```{r warning=FALSE, message=FALSE}
+fit <- train(classe ~ roll_belt+pitch_belt+yaw_belt+total_accel_belt+gyros_belt_x+gyros_belt_y+gyros_belt_z+accel_belt_x+accel_belt_y+accel_belt_z+magnet_belt_x+magnet_belt_y+magnet_belt_z+roll_arm+pitch_arm+yaw_arm+total_accel_arm+gyros_arm_x+gyros_arm_y+gyros_arm_z+accel_arm_x+accel_arm_y+accel_arm_z+magnet_arm_x+magnet_arm_y+magnet_arm_z+roll_dumbbell+pitch_dumbbell+yaw_dumbbell+total_accel_dumbbell+gyros_dumbbell_x+gyros_dumbbell_y+gyros_dumbbell_z+accel_dumbbell_x+accel_dumbbell_y+accel_dumbbell_z+magnet_dumbbell_x+magnet_dumbbell_y+magnet_dumbbell_z+roll_forearm+pitch_forearm+yaw_forearm+total_accel_forearm+gyros_forearm_x+gyros_forearm_y+gyros_forearm_z+accel_forearm_x+accel_forearm_y+accel_forearm_z+magnet_forearm_x+magnet_forearm_y+magnet_forearm_z, method="rf", data=subtrain, trControl=fitControl, na.action=na.omit)
+stopCluster(cluster)
+registerDoSEQ()
+```
+
+### Results and Out of Sampling Error
+
+Below are the results of fitting the model on the training set.
+
+```{r warning=FALSE, message=FALSE}
+fit
+fit$resample
+confusionMatrix.train(fit)
+```
+
+The average accuracy of the model is 99.11%, which implies an in-sample error of less than 1%. It follows that if this model is tested on a set of test data that comes from the same source as the training data, the out-of-sample error would be similar to the in-sample error. The confusion matrix below shows the result of predicting the outcome using the test dataset.
+
+```{r warning=FALSE, message=FALSE}
+confusionMatrix(as.factor(subtest$classe), predict(fit, subtest))
+```
